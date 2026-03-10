@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use quote::{quote, ToTokens};
-use syn::{Block, Expr, ExprBinary, ExprCall, ExprLit, ItemFn, Lit, Pat, Stmt, parse_macro_input, parse_quote};
+use syn::{Block, Expr, ExprBinary, ExprCall, ExprLit, Item, ItemFn, Lit, Pat, Stmt, parse_macro_input, parse_quote};
 
 // Recursively generate trace string for any expression
 fn trace_expr_rec(expr: &Expr) -> proc_macro2::TokenStream {
@@ -87,9 +87,33 @@ fn process_block(block: &mut Block) {
 
 #[proc_macro_attribute]
 pub fn mathtrace(_attr: TokenStream, input: TokenStream) -> TokenStream {
-    let mut func = parse_macro_input!(input as ItemFn);
+    // Parse any Rust item
+    let mut item = parse_macro_input!(input as Item);
 
-    process_block(&mut func.block);
+    match &mut item {
+        Item::Fn(func) => {
+            process_block(&mut func.block);
+        }
+        Item::Impl(item_impl) => {
+            for impl_item in &mut item_impl.items {
+                if let syn::ImplItem::Fn(method) = impl_item {
+                    process_block(&mut method.block);
+                }
+            }
+        }
+        Item::Mod(item_mod) => {
+            if let Some((_, items)) = &mut item_mod.content {
+                for inner_item in items {
+                    if let Item::Fn(inner_fn) = inner_item {
+                        process_block(&mut inner_fn.block);
+                    }
+                }
+            }
+        }
+        _ => {
+            // TODO: extend?
+        }
+    }
 
-    TokenStream::from(quote! { #func })
+    TokenStream::from(quote! { #item })
 }

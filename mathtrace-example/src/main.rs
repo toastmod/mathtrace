@@ -4,7 +4,7 @@ fn do_stuff(x: i32) -> i32 {
     x * 5
 }
 
-#[mathtrace_recursive]
+#[mathtrace]
 fn main() {
     let mut a = 1;
     let b = 2;
