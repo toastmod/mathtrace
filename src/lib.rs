@@ -86,7 +86,7 @@ fn process_block(block: &mut Block) {
 }
 
 #[proc_macro_attribute]
-pub fn mathtrace_recursive(_attr: TokenStream, input: TokenStream) -> TokenStream {
+pub fn mathtrace(_attr: TokenStream, input: TokenStream) -> TokenStream {
     let mut func = parse_macro_input!(input as ItemFn);
 
     process_block(&mut func.block);
