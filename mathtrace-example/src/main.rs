@@ -4,9 +4,9 @@ fn do_stuff(x: i32) -> i32 {
     x * 5
 }
 
-#[mathtrace]
+#[mathtrace_recursive]
 fn main() {
-    let a = 1;
+    let mut a = 1;
     let b = 2;
     let c = a + b;
     let d = 1 + c;
@@ -14,6 +14,10 @@ fn main() {
     let f = d + e;
     let g = do_stuff(f);
     do_stuff(a) + 1;
+
+    for i in 0..5 {
+        a += 1;
+    }
 
     println!("Hello, world!");
 }

@@ -1,14 +1,16 @@
 use proc_macro::TokenStream;
 use quote::{quote, ToTokens};
-use syn::{parse_macro_input, parse_quote, Expr, ExprBinary, ExprCall, ExprLit, ItemFn, Lit, Stmt, Pat};
+use syn::{Block, Expr, ExprBinary, ExprCall, ExprLit, ItemFn, Lit, Pat, Stmt, parse_macro_input, parse_quote};
 
-/// Recursively build a trace string for any expression
-fn trace_expr(expr: &Expr) -> proc_macro2::TokenStream {
+// Recursively generate trace string for any expression
+fn trace_expr_rec(expr: &Expr) -> proc_macro2::TokenStream {
     match expr {
         Expr::Binary(bin) => {
-            let left_tokens = trace_expr(&bin.left);
-            let right_tokens = trace_expr(&bin.right);
+            let left = &bin.left;
+            let right = &bin.right;
             let op = &bin.op;
+            let left_tokens = trace_expr_rec(left);
+            let right_tokens = trace_expr_rec(right);
 
             quote! {
                 format!("({}) {} ({})", #left_tokens, stringify!(#op), #right_tokens)
@@ -25,29 +27,25 @@ fn trace_expr(expr: &Expr) -> proc_macro2::TokenStream {
             quote! { format!("{:?}", #expr) }
         }
         _ => {
-            // fallback for other expressions
             let expr_tokens = quote! { #expr };
             quote! { format!("{:?}", #expr_tokens) }
         }
     }
 }
 
-#[proc_macro_attribute]
-pub fn mathtrace(_attr: TokenStream, input: TokenStream) -> TokenStream {
-    let mut func = parse_macro_input!(input as ItemFn);
+// Recursively process any block
+fn process_block(block: &mut Block) {
     let mut new_stmts = Vec::new();
 
-    for stmt in &func.block.stmts {
+    for stmt in &mut block.stmts {
         match stmt {
-            // let statements
             Stmt::Local(local) => {
                 if let Some(init) = &local.init {
-                    let expr = &init.expr;
                     let name = &local.pat;
+                    let expr = &init.expr;
 
-                    // generate trace
-                    let etrace = trace_expr(expr);
-                    let trace_stmt = parse_quote! {
+                    let etrace = trace_expr_rec(expr);
+                    let trace_stmt: Stmt = parse_quote! {
                         println!("{} = {}", stringify!(#name), #etrace);
                     };
 
@@ -56,17 +54,24 @@ pub fn mathtrace(_attr: TokenStream, input: TokenStream) -> TokenStream {
                 new_stmts.push(stmt.clone());
             }
 
-            // standalone expressions
             Stmt::Expr(expr, _) => {
-                // Only trace binary or call expressions
                 match expr {
                     Expr::Binary(_) | Expr::Call(_) => {
-                        let etrace = trace_expr(expr);
-                        let trace_stmt = parse_quote! {
+                        let etrace = trace_expr_rec(&expr);
+                        let trace_stmt: Stmt = parse_quote! {
                             println!("{}", #etrace);
                         };
                         new_stmts.push(trace_stmt);
                     }
+                    _ => {}
+                }
+
+                // recurse into nested blocks
+                match expr {
+                    Expr::If(expr_if) => process_block(&mut expr_if.then_branch),
+                    Expr::Block(expr_block) => process_block(&mut expr_block.block),
+                    Expr::While(expr_while) => process_block(&mut expr_while.body),
+                    Expr::ForLoop(expr_for) => process_block(&mut expr_for.body),
                     _ => {}
                 }
 
@@ -77,7 +82,14 @@ pub fn mathtrace(_attr: TokenStream, input: TokenStream) -> TokenStream {
         }
     }
 
-    func.block.stmts = new_stmts;
+    block.stmts = new_stmts;
+}
+
+#[proc_macro_attribute]
+pub fn mathtrace_recursive(_attr: TokenStream, input: TokenStream) -> TokenStream {
+    let mut func = parse_macro_input!(input as ItemFn);
+
+    process_block(&mut func.block);
 
     TokenStream::from(quote! { #func })
 }
