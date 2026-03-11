@@ -4,6 +4,14 @@ fn do_stuff(x: i32) -> i32 {
     x * 5
 }
 
+struct Thing {
+    x: i32
+}
+
+fn thing(x: i32) -> Thing {
+    Thing {x}
+}
+
 #[mathtrace]
 fn main() {
     let mut a = 1;
@@ -14,6 +22,8 @@ fn main() {
     let f = d + e;
     let g = do_stuff(f);
     do_stuff(a) + 1;
+
+    let h = thing(b);
 
     for i in 0..5 {
         a += 1;

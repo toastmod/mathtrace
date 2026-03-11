@@ -1,6 +1,24 @@
+use std::any::{Any, TypeId};
+
 use proc_macro::TokenStream;
 use quote::{quote, ToTokens};
 use syn::{Block, Expr, ExprBinary, ExprCall, ExprLit, Item, ItemFn, Lit, Pat, Stmt, parse_macro_input, parse_quote};
+
+// pub fn type_extract<'static, T>(t: &T) -> bool {
+//     let type_id = t.type_id(); 
+//     type_id == TypeId::of::<u8>()
+//         || type_id == TypeId::of::<u16>()
+//         || type_id == TypeId::of::<u32>()
+//         || type_id == TypeId::of::<u64>()
+//         || type_id == TypeId::of::<usize>()
+//         || type_id == TypeId::of::<i8>()
+//         || type_id == TypeId::of::<i16>()
+//         || type_id == TypeId::of::<i32>()
+//         || type_id == TypeId::of::<i64>()
+//         || type_id == TypeId::of::<isize>()
+//         || type_id == TypeId::of::<f32>()
+//         || type_id == TypeId::of::<f64>()
+// } 
 
 // Recursively generate trace string for any expression
 fn trace_expr_rec(expr: &Expr) -> proc_macro2::TokenStream {
@@ -18,13 +36,14 @@ fn trace_expr_rec(expr: &Expr) -> proc_macro2::TokenStream {
         }
         Expr::Call(call) => {
             let call_expr = quote! { #call };
-            quote! { format!("{} = {:?}", stringify!(#call_expr), #call_expr) }
+            // quote! { format!("{} = {:?}", stringify!(#call_expr), #call_expr) }
+            quote! { format!("{}", stringify!(#call_expr)) }
         }
         Expr::Lit(ExprLit { lit: Lit::Int(_) | Lit::Float(_), .. }) => {
             quote! { format!("{:?}", #expr) }
         }
         Expr::Path(_) => {
-            quote! { format!("{:?}", #expr) }
+            quote! { format!("{}", stringify!(#expr)) }
         }
         _ => {
             let expr_tokens = quote! { #expr };
@@ -38,31 +57,48 @@ fn process_block(block: &mut Block) {
     let mut new_stmts = Vec::new();
 
     for stmt in &mut block.stmts {
+        let sstmt = stmt.clone();
         match stmt {
             Stmt::Local(local) => {
+
+                new_stmts.push(sstmt);
                 if let Some(init) = &local.init {
                     let name = &local.pat;
                     let expr = &init.expr;
 
-                    let etrace = trace_expr_rec(expr);
-                    let trace_stmt: Stmt = parse_quote! {
-                        println!("{} = {}", stringify!(#name), #etrace);
-                    };
+                    if let Expr::Binary(_) = expr.as_ref() {
+                        let etrace = trace_expr_rec(expr);
+                        let trace_stmt: Stmt = parse_quote! {
+                            println!("{} = {} = {}", stringify!(#name), #etrace, #name);
+                        };
+    
+                        new_stmts.push(trace_stmt);
 
-                    new_stmts.push(trace_stmt);
+                    } else {
+                        // Handle function type decoding here
+                    }
+
                 }
-                new_stmts.push(stmt.clone());
+
             }
 
             Stmt::Expr(expr, _) => {
                 match expr {
-                    Expr::Binary(_) | Expr::Call(_) => {
+                    Expr::Binary(_) => {
                         let etrace = trace_expr_rec(&expr);
                         let trace_stmt: Stmt = parse_quote! {
                             println!("{}", #etrace);
                         };
                         new_stmts.push(trace_stmt);
-                    }
+                    },
+                    // Expr::Call(c) => {
+                    //     // If it's a call, check it's return type
+                    //     let etrace = trace_expr_rec(&expr);
+                    //     let trace_stmt: Stmt = parse_quote! {
+                    //         println!("{}", #etrace);
+                    //     };
+                    //     new_stmts.push(trace_stmt);
+                    // }
                     _ => {}
                 }
 
